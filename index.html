@@ -132,7 +132,16 @@
             loginModal: document.getElementById('loginModal') // Assuming this exists for the unauthenticated user flow
         };
 
-        const API_URL = 'http://localhost:3000'; // Define API_URL
+        // Smart API_URL: Uses current origin for https or non-localhost http,
+        // otherwise defaults to localhost:3000 for local http development.
+        let determinedApiUrl;
+        if (window.location.protocol === 'https:' || (window.location.protocol === 'http:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')) {
+            determinedApiUrl = window.location.origin;
+        } else {
+            determinedApiUrl = 'http://localhost:3000';
+        }
+        const API_URL = determinedApiUrl;
+        console.log(`API_URL set to: ${API_URL}`); // For debugging/verification
 
         const appState = {
             conversations: [],

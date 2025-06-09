@@ -6,9 +6,34 @@ const { Server } = require("socket.io");
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs'); // Only if user registration/login is part of this server
 const cors = require('cors');
+const helmet = require('helmet'); // For security headers
+const rateLimit = require('express-rate-limit'); // For rate limiting
 
 const app = express();
-app.use(cors()); // Basic CORS setup
+
+// --- Security Middlewares ---
+app.use(helmet()); // Apply basic security headers
+
+// Define allowed origins for CORS
+// In production, replace 'http://localhost:YOUR_FRONTEND_PORT' with your actual frontend domain(s)
+const allowedOrigins = process.env.NODE_ENV === 'production'
+    ? [process.env.FRONTEND_PROD_URL || 'https://yourfrontenddomain.com'] // Example: Use environment variable for prod URL
+    : ['http://localhost:3000', 'http://localhost:8080', 'http://127.0.0.1:5500']; // Allow common dev ports, including default for live server from index.html
+
+const corsOptions = {
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) === -1) {
+            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    },
+    credentials: true // If you need to allow cookies or authorization headers
+};
+app.use(cors(corsOptions));
+
 app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-very-secret-key'; // Use environment variable
@@ -72,8 +97,9 @@ const socketAuthMiddleware = async (socket, next) => {
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "*", // Adjust for production
-        methods: ["GET", "POST"]
+        origin: allowedOrigins, // Use the same whitelist for Socket.IO
+        methods: ["GET", "POST"], // Adjust methods as needed for Socket.IO
+        // credentials: true // If your Socket.IO connection needs credentials
     }
 });
 
@@ -99,8 +125,18 @@ io.on('connection', async (socket) => {
 });
 
 // --- API Routes ---
-// Placeholder auth routes (implement proper registration and login)
-app.post('/api/auth/register', async (req, res) => {
+// --- Rate Limiter for Auth Routes ---
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10, // Limit each IP to 10 requests per windowMs for /api/auth/register and /api/auth/login
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    message: 'Too many authentication attempts from this IP, please try again after 15 minutes.'
+});
+
+// --- API Routes ---
+// Apply limiter to auth routes
+app.post('/api/auth/register', authLimiter, async (req, res) => {
     try {
         const { name, email, password } = req.body;
         if (!name || !email || !password) return res.status(400).json({ message: 'All fields are required.' });
@@ -117,7 +153,7 @@ app.post('/api/auth/register', async (req, res) => {
     }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authLimiter, async (req, res) => {
     try {
         const { email, password } = req.body;
         if (!email || !password) return res.status(400).json({ message: 'Email and password are required.' });
