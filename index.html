@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messaging Test</title>
+    <style>
+        body { font-family: sans-serif; margin: 0; padding: 20px; background-color: #f4f4f4; }
+        .hidden { display: none !important; }
+        #messagingModalContainer {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center;
+        }
+        .messaging-modal {
+            background-color: white; width: 800px; height: 600px; border-radius: 8px;
+            display: flex; flex-direction: column; box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        }
+        .modal-header {
+            padding: 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;
+        }
+        .modal-header h3 { margin: 0; }
+        .modal-body { display: flex; flex-grow: 1; overflow: hidden; }
+        .conversation-list-view { width: 300px; border-right: 1px solid #eee; overflow-y: auto; }
+        .conversation-list { list-style: none; padding: 0; margin: 0; }
+        .conversation-item { padding: 15px; border-bottom: 1px solid #eee; cursor: pointer; }
+        .conversation-item:hover { background-color: #f9f9f9; }
+        .conversation-item.active { background-color: #eef; }
+        .conversation-recipient { font-weight: bold; }
+        .conversation-last-message { font-size: 0.9em; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .conversation-unread-badge { background-color: red; color: white; border-radius: 50%; padding: 2px 6px; font-size: 0.7em; float: right; }
+        .chat-view { flex-grow: 1; display: flex; flex-direction: column; }
+        .chat-header { padding: 15px; border-bottom: 1px solid #eee; display: flex; align-items: center; }
+        .chat-header img { width: 40px; height: 40px; border-radius: 50%; margin-right: 10px; }
+        .chat-messages { flex-grow: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; }
+        .message-bubble {
+            padding: 8px 12px; border-radius: 18px; margin-bottom: 8px; max-width: 70%;
+            word-wrap: break-word;
+        }
+        .message-bubble.sender { background-color: #007bff; color: white; align-self: flex-end; }
+        .message-bubble.receiver { background-color: #e9e9eb; color: black; align-self: flex-start; }
+        .message-timestamp { font-size: 0.75em; color: #777; margin-top: 2px; }
+        .chat-input-area { padding: 15px; border-top: 1px solid #eee; }
+        #sendMessageForm { display: flex; }
+        #messageInput { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 20px; margin-right: 10px; }
+        #sendMessageBtn { padding: 10px 15px; border-radius: 20px; background-color: #007bff; color: white; border: none; cursor: pointer; }
+        #messagesBtnContainer { position: fixed; bottom: 20px; right: 20px; }
+        #messagesBtn {
+            background-color: #007bff; color: white; border: none; padding: 15px;
+            border-radius: 50%; width: 60px; height: 60px; font-size: 24px;
+            cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            display: flex; justify-content: center; align-items: center;
+        }
+        #unreadMessagesBadge {
+            position: absolute; top: -5px; right: -5px; background-color: red;
+            color: white; border-radius: 50%; padding: 3px 6px; font-size: 0.8em;
+        }
+        .loading-spinner { text-align: center; padding: 20px; }
+        /* Placeholder for customer service chat */
+        #chatMessageAreaCustomerService { min-height: 200px; border: 1px solid #ccc; margin-bottom: 10px; padding: 10px; overflow-y: auto; background-color: #f9f9f9;}
+    </style>
+</head>
+<body>
+
+    <div id="messagesBtnContainer">
+        <button id="messagesBtn">💬</button>
+        <span id="unreadMessagesBadge" class="hidden">0</span>
+    </div>
+
+    <div id="messagingModalContainer" class="hidden">
+        <div class="messaging-modal">
+            <div class="modal-header">
+                <h3>Messages</h3>
+                <button id="closeMessagingModalBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="conversationListView" class="conversation-list-view">
+                    <ul id="conversationList">
+                        <!-- Conversation items will be injected here -->
+                    </ul>
+                </div>
+                <div id="chatView" class="chat-view hidden">
+                    <div class="chat-header">
+                        <button id="backToConversationsBtn">&larr; Back</button>
+                        <img id="chatViewRecipientAvatar" src="https://via.placeholder.com/40" alt="Avatar" class="chat-view-recipient-avatar">
+                        <span id="chatViewRecipientName">Recipient Name</span>
+                    </div>
+                    <div id="chatMessageArea" class="chat-messages"> <!-- User-to-user messaging area -->
+                        <!-- Messages will be injected here -->
+                    </div>
+                    <div class="chat-input-area">
+                        <form id="sendMessageForm">
+                            <input type="text" id="messageInput" placeholder="Type a message...">
+                            <button type="submit" id="sendMessageBtn">Send</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Placeholder for customer service chat UI that might also use chatMessageArea -->
+    <h2>Customer Service Chat (Placeholder)</h2>
+    <div id="chatMessageAreaCustomerService">
+        <p>Customer service messages might appear here.</p>
+    </div>
+    <button onclick="startOrOpenChatWith(2)">Chat with Vendor Owner 2 (User ID)</button>
+    <button onclick="startOrOpenChatWith(3)">Chat with Vendor Owner 3 (User ID)</button>
+
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // Mock loggedInUser - replace with actual user data retrieval
+        const loggedInUser = { id: 1, name: "Current User" }; // Example user
+
+        const DOMElements = {
+            messagesBtn: document.getElementById('messagesBtn'),
+            unreadMessagesBadge: document.getElementById('unreadMessagesBadge'),
+            messagingModalContainer: document.getElementById('messagingModalContainer'),
+            closeMessagingModalBtn: document.getElementById('closeMessagingModalBtn'),
+            conversationListView: document.getElementById('conversationListView'),
+            conversationList: document.getElementById('conversationList'),
+            chatView: document.getElementById('chatView'),
+            backToConversationsBtn: document.getElementById('backToConversationsBtn'),
+            chatViewRecipientName: document.getElementById('chatViewRecipientName'),
+            chatViewRecipientAvatar: document.getElementById('chatViewRecipientAvatar'), // Added for completeness
+            chatMessageArea: document.getElementById('chatMessageArea'), // For user-to-user messaging
+            chatMessageAreaCustomerService: document.getElementById('chatMessageAreaCustomerService'), // For customer service
+            sendMessageForm: document.getElementById('sendMessageForm'),
+            messageInput: document.getElementById('messageInput'),
+            sendMessageBtn: document.getElementById('sendMessageBtn'),
+            // Potentially add other relevant elements like loginModal if needed for startOrOpenChatWith
+            loginModal: document.getElementById('loginModal') // Assuming this exists for the unauthenticated user flow
+        };
+
+        const API_URL = 'http://localhost:3000'; // Define API_URL
+
+        const appState = {
+            conversations: [],
+            activeConversation: {
+                id: null,
+                recipientName: null,
+                recipientId: null,
+                messages: []
+            },
+            socket: null,
+            isMessagingModalOpen: false // To track modal state
+        };
+
+        // --- Mock API ---
+        const mockApiData = {
+            conversations: [
+                { id: 'conv1', recipient: { id: 2, name: 'Vendor Owner 2', avatar: 'https://via.placeholder.com/40' }, lastMessage: 'Okay, sounds good!', unreadCount: 2, timestamp: new Date(Date.now() - 3600000).toISOString() },
+                { id: 'conv2', recipient: { id: 3, name: 'User Three', avatar: 'https://via.placeholder.com/40' }, lastMessage: 'See you then.', unreadCount: 0, timestamp: new Date(Date.now() - 7200000).toISOString() },
+                { id: 'conv3', recipient: { id: 4, name: 'User Four', avatar: 'https://via.placeholder.com/40' }, lastMessage: 'Thanks for the update, this is a very long message to test ellipsis.', unreadCount: 1, timestamp: new Date().toISOString() }
+            ],
+            messages: {
+                'conv1': [
+                    { id: 'msg1', conversationId: 'conv1', senderId: 2, text: 'Hello there!', timestamp: new Date(Date.now() - 3660000).toISOString() },
+                    { id: 'msg2', conversationId: 'conv1', senderId: 1, text: 'Hi! I have a question.', timestamp: new Date(Date.now() - 3630000).toISOString() },
+                    { id: 'msg3', conversationId: 'conv1', senderId: 2, text: 'Okay, sounds good!', timestamp: new Date(Date.now() - 3600000).toISOString() }
+                ],
+                'conv2': [
+                    { id: 'msg4', conversationId: 'conv2', senderId: 1, text: 'Meeting confirmed.', timestamp: new Date(Date.now() - 7200000).toISOString() },
+                    { id: 'msg5', conversationId: 'conv2', senderId: 3, text: 'See you then.', timestamp: new Date(Date.now() - 7200000).toISOString() }
+                ],
+                 'conv3': [
+                    { id: 'msg6', conversationId: 'conv3', senderId: 4, text: 'Thanks for the update, this is a very long message to test ellipsis.', timestamp: new Date().toISOString() }
+                ]
+            }
+        };
+
+        async function apiFetch(endpoint, method = 'GET', body = null) {
+            console.log(`API Fetch: ${method} ${endpoint}`, body);
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    if (method === 'GET' && endpoint === '/api/messages/conversations') {
+                        resolve({ success: true, data: mockApiData.conversations.map(c => ({...c, messages: undefined})).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)) });
+                    } else if (method === 'GET' && endpoint.startsWith('/api/messages/conversations/')) {
+                        const convId = endpoint.split('/').pop();
+                        const messages = mockApiData.messages[convId] || [];
+                        resolve({ success: true, data: messages.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp)) });
+                    } else if (method === 'PUT' && endpoint.includes('/read')) {
+                        const convId = endpoint.split('/')[4];
+                        const conv = mockApiData.conversations.find(c => c.id === convId);
+                        if (conv) conv.unreadCount = 0;
+                        // In a real app, this would also update on the server
+                        resolve({ success: true });
+                    } else if (method === 'POST' && endpoint === '/api/messages') {
+                        const { receiverId, message } = body;
+                        // Find existing conversation or create a new one
+                        let conversation = mockApiData.conversations.find(c =>
+                            (c.recipient.id === receiverId && loggedInUser.id === mockApiData.users.find(u=>u.id === c.senderId)?.id) || // Current user sent to receiver
+                            (c.senderId === receiverId && loggedInUser.id === c.recipient.id) // Current user received from receiver
+                        );
+                        // Simplified: Assuming loggedInUser.id is 1, and we're looking for a conversation with receiverId
+                        // This mock doesn't have full user objects in conversations, so we'll use a simpler find or create.
+                        conversation = mockApiData.conversations.find(c => c.recipient.id === receiverId || (mockApiData.messages[c.id] && mockApiData.messages[c.id].some(m => m.senderId === receiverId)));
+
+
+                        if (!conversation) {
+                            const newConvId = `conv${mockApiData.conversations.length + 1}`;
+                            // Find recipient details (mocked)
+                            const recipientUser = receiverId === 2 ? { id: 2, name: 'Vendor Owner 2', avatar: 'https://via.placeholder.com/40' } :
+                                                receiverId === 3 ? { id: 3, name: 'User Three', avatar: 'https://via.placeholder.com/40' } :
+                                                { id: receiverId, name: `User ${receiverId}`, avatar: 'https://via.placeholder.com/40' };
+
+                            conversation = {
+                                id: newConvId,
+                                recipient: recipientUser,
+                                lastMessage: message || "Chat started.",
+                                unreadCount: message ? 1 : 0, // No unread if it's just starting chat without a message
+                                timestamp: new Date().toISOString()
+                            };
+                            mockApiData.conversations.push(conversation);
+                            mockApiData.messages[newConvId] = [];
+                        }
+
+                        if (message) { // If there's an actual message to send
+                            const newMessage = {
+                                id: `msg${Object.values(mockApiData.messages).flat().length + 1}`,
+                                conversationId: conversation.id,
+                                senderId: loggedInUser.id,
+                                text: message,
+                                timestamp: new Date().toISOString()
+                            };
+                            mockApiData.messages[conversation.id].push(newMessage);
+                            conversation.lastMessage = message;
+                            conversation.timestamp = newMessage.timestamp;
+                        }
+                        resolve({ success: true, data: conversation });
+                    } else {
+                        resolve({ success: false, error: 'Unknown endpoint or method' });
+                    }
+                }, 500);
+            });
+        }
+        // --- End Mock API ---
+
+        function initSocket() {
+            // Assuming appState.token is populated after login and API_URL is defined
+            // For this example, API_URL would be the base URL of the server, e.g., window.location.origin
+            // const API_URL = window.location.origin;
+
+            // Ensure you have a valid token, otherwise socket connection might be rejected by server auth
+            // For this mock, we don't have a login flow that sets appState.token
+            // If we were to make this fully functional with the provided server.js,
+            // we'd need a login mechanism here to get a token.
+            // if (!appState.token) { // This check would be important in a real app with login
+            //     console.log("No token available for socket authentication. Socket not initialized.");
+            //     return;
+            // }
+            // The subtask implies appState.socket should be used, not a global `socket`.
+            // Also, the example shows `socket = io(...)` then refers to `socket.on`.
+            // Let's stick to `appState.socket` as it's defined in `appState`.
+
+            if (appState.socket) return; // Already initialized
+
+            // Assuming appState.token would be populated by a login flow not present in this mock.
+            // For testing with the provided server.js, a valid token would be needed.
+            // If appState.token is not set, server will reject connection if its socketAuthMiddleware is active.
+            appState.socket = io(API_URL, {
+                auth: { token: appState.token || "mockTokenForDev" } // Using mockTokenForDev if appState.token is null/undefined
+                                                                  // In a real app, ensure appState.token is valid.
+            });
+
+            appState.socket.on('connect', () => {
+                console.log('Conectado ao servidor via WebSocket:', appState.socket.id);
+            });
+
+            appState.socket.on('new_message', (messageData) => {
+                console.log('Nova mensagem recebida via socket:', messageData);
+                handleIncomingMessage(messageData);
+            });
+
+            // The subtask example included 'ponto_status_atualizado' and 'ponto_localizacao_atualizada'.
+            // These are not present in the messaging-focused index.html provided earlier.
+            // I will only include the listeners relevant to the core task or those generally useful.
+            // If those other listeners were part of a broader application context, they would be kept.
+            // For now, sticking to messaging + essential connection events.
+
+            appState.socket.on('connect_error', (err) => {
+                console.error("Socket connection error:", err.message);
+                // Example: if (err.message === "Authentication error") handleLogout();
+                // For this mock, we don't have handleLogout.
+            });
+            console.log('Socket initialization with API_URL and auth token initiated.');
+        }
+
+        function attachEventListeners() {
+            DOMElements.messagesBtn.addEventListener('click', openMessagingModal);
+            DOMElements.closeMessagingModalBtn.addEventListener('click', () => {
+                DOMElements.messagingModalContainer.classList.add('hidden');
+                appState.isMessagingModalOpen = false;
+            });
+            DOMElements.backToConversationsBtn.addEventListener('click', showConversationListView);
+            DOMElements.sendMessageForm.addEventListener('submit', handleSendMessage);
+        }
+
+        async function fetchUnreadMessages() {
+            try {
+                // In a real app, this might be a dedicated endpoint or part of the main conversation fetch
+                const response = await apiFetch('/api/messages/conversations'); // Reusing conversation list for unread counts
+                if (response.success) {
+                    const totalUnread = response.data.reduce((sum, conv) => sum + (conv.unreadCount || 0), 0);
+                    updateUnreadBadge(totalUnread);
+                }
+            } catch (error) {
+                console.error("Error fetching unread messages:", error);
+            }
+        }
+
+        function updateUnreadBadge(count) {
+            if (count > 0) {
+                DOMElements.unreadMessagesBadge.textContent = count > 9 ? '9+' : count;
+                DOMElements.unreadMessagesBadge.classList.remove('hidden');
+            } else {
+                DOMElements.unreadMessagesBadge.classList.add('hidden');
+            }
+        }
+
+        async function openMessagingModal() {
+            DOMElements.messagingModalContainer.classList.remove('hidden');
+            appState.isMessagingModalOpen = true;
+            showConversationListView(); // Ensure conversation list is shown by default
+            DOMElements.conversationList.innerHTML = '<div class="loading-spinner">Loading conversations...</div>'; // Loading state
+
+            try {
+                const response = await apiFetch('/api/messages/conversations');
+                if (response.success && response.data) {
+                    appState.conversations = response.data;
+                    renderConversationList(appState.conversations);
+                } else {
+                    DOMElements.conversationList.innerHTML = '<li>Error loading conversations.</li>';
+                }
+            } catch (error) {
+                console.error("Error opening messaging modal:", error);
+                DOMElements.conversationList.innerHTML = '<li>Error loading conversations.</li>';
+            }
+        }
+
+        function renderConversationList(conversations) {
+            DOMElements.conversationList.innerHTML = ''; // Clear previous list or loading state
+            if (!conversations || conversations.length === 0) {
+                DOMElements.conversationList.innerHTML = '<li>No conversations yet.</li>';
+                updateUnreadBadge(0); // Ensure badge is hidden if no conversations
+                return;
+            }
+
+            let totalUnread = 0;
+            conversations.forEach(conv => {
+                const listItem = document.createElement('li');
+                listItem.classList.add('conversation-item');
+                listItem.dataset.conversationId = conv.id;
+                listItem.dataset.recipientName = conv.recipient.name;
+                listItem.dataset.recipientId = conv.recipient.id;
+                listItem.dataset.recipientAvatar = conv.recipient.avatar;
+
+
+                const recipientSpan = document.createElement('span');
+                recipientSpan.classList.add('conversation-recipient');
+                recipientSpan.textContent = conv.recipient.name;
+
+                const lastMessageSpan = document.createElement('span');
+                lastMessageSpan.classList.add('conversation-last-message');
+                lastMessageSpan.textContent = conv.lastMessage;
+
+                listItem.appendChild(recipientSpan);
+                listItem.appendChild(lastMessageSpan);
+
+                if (conv.unreadCount > 0) {
+                    const unreadBadge = document.createElement('span');
+                    unreadBadge.classList.add('conversation-unread-badge');
+                    unreadBadge.textContent = conv.unreadCount;
+                    listItem.appendChild(unreadBadge);
+                    totalUnread += conv.unreadCount;
+                }
+
+                listItem.addEventListener('click', () => openChat(conv.id, conv.recipient.name, conv.recipient.id, conv.recipient.avatar));
+                DOMElements.conversationList.appendChild(listItem);
+            });
+            updateUnreadBadge(totalUnread);
+        }
+
+        async function openChat(conversationId, recipientName, recipientId, recipientAvatar) {
+            appState.activeConversation.id = conversationId;
+            appState.activeConversation.recipientName = recipientName;
+            appState.activeConversation.recipientId = recipientId;
+
+            DOMElements.conversationListView.classList.add('hidden');
+            DOMElements.chatView.classList.remove('hidden');
+
+            DOMElements.chatViewRecipientName.textContent = recipientName;
+            if (DOMElements.chatViewRecipientAvatar && recipientAvatar) {
+                DOMElements.chatViewRecipientAvatar.src = recipientAvatar;
+            } else if (DOMElements.chatViewRecipientAvatar) {
+                 DOMElements.chatViewRecipientAvatar.src = 'https://via.placeholder.com/40'; // Default avatar
+            }
+
+
+            DOMElements.chatMessageArea.innerHTML = '<div class="loading-spinner">Loading messages...</div>';
+
+            try {
+                // Fetch messages for this conversation
+                const messagesResponse = await apiFetch(`/api/messages/conversations/${conversationId}`);
+                if (messagesResponse.success && messagesResponse.data) {
+                    appState.activeConversation.messages = messagesResponse.data;
+                    renderMessages(messagesResponse.data);
+                } else {
+                    DOMElements.chatMessageArea.innerHTML = '<li>Error loading messages.</li>';
+                }
+
+                // Mark messages as read
+                await apiFetch(`/api/messages/conversations/${conversationId}/read`, 'PUT');
+                // Refresh conversation list in the background to update unread counts
+                const convResponse = await apiFetch('/api/messages/conversations');
+                if (convResponse.success && convResponse.data) {
+                    appState.conversations = convResponse.data;
+                    renderConversationList(appState.conversations); // Re-render to update UI
+                }
+            } catch (error) {
+                console.error(`Error opening chat for ${conversationId}:`, error);
+                DOMElements.chatMessageArea.innerHTML = '<li>Error loading messages.</li>';
+            }
+        }
+
+        function renderMessages(messages) {
+            DOMElements.chatMessageArea.innerHTML = ''; // Clear loading/previous messages
+            if (!messages || messages.length === 0) {
+                DOMElements.chatMessageArea.innerHTML = '<div style="text-align:center; color:#888; padding:20px;">No messages yet. Start the conversation!</div>';
+                return;
+            }
+            messages.forEach(msg => appendMessageToChat(msg));
+        }
+
+        function appendMessageToChat(msg, isTemporary = false) {
+            const messageBubble = document.createElement('div');
+            messageBubble.classList.add('message-bubble');
+            // Backend should ideally provide sender details or a way to identify current user's messages
+            const isSender = msg.senderId === loggedInUser.id;
+            messageBubble.classList.add(isSender ? 'sender' : 'receiver');
+            if (isTemporary) {
+                messageBubble.style.opacity = '0.7'; // Indicate temporary message
+            }
+
+            const messageText = document.createElement('p');
+            messageText.textContent = msg.text;
+            messageText.style.margin = '0 0 4px 0';
+
+            const messageTimestamp = document.createElement('span');
+            messageTimestamp.classList.add('message-timestamp');
+            messageTimestamp.textContent = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            messageBubble.appendChild(messageText);
+            messageBubble.appendChild(messageTimestamp);
+            DOMElements.chatMessageArea.appendChild(messageBubble);
+
+            // Scroll to bottom
+            DOMElements.chatMessageArea.scrollTop = DOMElements.chatMessageArea.scrollHeight;
+        }
+
+        async function handleSendMessage(e) {
+            e.preventDefault();
+            const messageText = DOMElements.messageInput.value.trim();
+            if (!messageText) return;
+
+            const tempMessageId = `temp_${Date.now()}`;
+            const tempMessage = {
+                id: tempMessageId,
+                conversationId: appState.activeConversation.id,
+                senderId: loggedInUser.id, // Current user is the sender
+                text: messageText,
+                timestamp: new Date().toISOString()
+            };
+
+            appendMessageToChat(tempMessage, true); // Display message immediately as temporary
+            DOMElements.messageInput.value = ''; // Clear input
+
+            try {
+                const response = await apiFetch('/api/messages', 'POST', {
+                    receiverId: appState.activeConversation.recipientId,
+                    message: messageText
+                });
+
+                if (response.success && response.data) {
+                    // Update temp message with actual data from server (e.g., actual message ID)
+                    // For simplicity, we'll assume the server confirms the message as sent.
+                    // In a real app, you might replace the temp message or update its status.
+                    console.log('Message sent successfully:', response.data);
+                    // If the conversation was newly created, its ID might change or be confirmed.
+                    if (appState.activeConversation.id !== response.data.id) {
+                        appState.activeConversation.id = response.data.id; // Update active conversation ID
+                    }
+                    // Remove temporary message styling (optional, if you update it)
+                    const tempMsgElement = Array.from(DOMElements.chatMessageArea.children).find(el => el.textContent.includes(tempMessage.text));
+                    if (tempMsgElement) tempMsgElement.style.opacity = '1';
+
+                    // Add the actual message (or update the temp one) to appState.activeConversation.messages
+                    const confirmedMessage = response.data.lastMessage ? // If POST returns full message
+                        {
+                            id: response.data.lastMessage.id || tempMessageId, // Use server ID if available
+                            conversationId: response.data.id,
+                            senderId: loggedInUser.id,
+                            text: response.data.lastMessage.text || messageText,
+                            timestamp: response.data.lastMessage.timestamp || tempMessage.timestamp
+                        } : // Simplified: Assuming the sent message is the last message in the conversation data returned
+                        {
+                            id: `msg_confirmed_${Date.now()}`, // Placeholder if not returned
+                            conversationId: response.data.id,
+                            senderId: loggedInUser.id,
+                            text: messageText,
+                            timestamp: new Date(response.data.timestamp).toISOString() // Use conversation timestamp
+                        };
+
+                    // To avoid duplication if appendMessageToChat was already called with a temporary message
+                    // and the server echoes back the same message.
+                    // A more robust way is to give temporary messages a unique ID and replace them.
+                    // For now, we'll assume the temporary message is enough for UI, and state will be updated.
+                    const existingMsgIndex = appState.activeConversation.messages.findIndex(m => m.id === tempMessageId);
+                    if (existingMsgIndex > -1) {
+                        appState.activeConversation.messages[existingMsgIndex] = confirmedMessage;
+                    } else {
+                        appState.activeConversation.messages.push(confirmedMessage);
+                    }
+
+
+                    // Refresh conversation list to show new last message and order
+                    const convResponse = await apiFetch('/api/messages/conversations');
+                    if (convResponse.success && convResponse.data) {
+                        appState.conversations = convResponse.data;
+                         // If messaging modal is open and conversation list is visible, re-render it
+                        if (appState.isMessagingModalOpen && !DOMElements.conversationListView.classList.contains('hidden')) {
+                            renderConversationList(appState.conversations);
+                        } else if (appState.isMessagingModalOpen && DOMElements.chatView.classList.contains('hidden')) {
+                             // This case should ideally not happen if chat view implies modal is open
+                             // but as a fallback, ensure conversation list is updated if it's the primary view in modal
+                            renderConversationList(appState.conversations);
+                        }
+                    }
+
+                } else {
+                    console.error("Error sending message:", response.error);
+                    // Handle error: maybe show an error message on the temp bubble
+                    const tempMsgElement = Array.from(DOMElements.chatMessageArea.children).find(el => el.textContent.includes(tempMessage.text));
+                    if (tempMsgElement) {
+                        tempMsgElement.style.borderColor = 'red';
+                        const errorSpan = document.createElement('span');
+                        errorSpan.textContent = ' Failed to send';
+                        errorSpan.style.color = 'red';
+                        errorSpan.style.fontSize = '0.8em';
+                        tempMsgElement.appendChild(errorSpan);
+                    }
+                    // Optionally, remove the temp message or allow resend
+                }
+            } catch (error) {
+                console.error("Error sending message:", error);
+                 const tempMsgElement = Array.from(DOMElements.chatMessageArea.children).find(el => el.textContent.includes(tempMessage.text));
+                    if (tempMsgElement) {
+                        tempMsgElement.style.borderColor = 'red';
+                        const errorSpan = document.createElement('span');
+                        errorSpan.textContent = ' Failed to send';
+                        errorSpan.style.color = 'red';
+                        errorSpan.style.fontSize = '0.8em';
+                        tempMsgElement.appendChild(errorSpan);
+                    }
+            }
+        }
+
+        function handleIncomingMessage(messageData) {
+            console.log('Incoming message:', messageData);
+
+            // Update or add to appState.conversations
+            let conversation = appState.conversations.find(c => c.id === messageData.conversationId);
+            if (conversation) {
+                conversation.lastMessage = messageData.text;
+                conversation.timestamp = messageData.timestamp;
+                if (appState.activeConversation.id !== messageData.conversationId || !appState.isMessagingModalOpen || DOMElements.conversationListView.classList.contains('hidden')) {
+                    conversation.unreadCount = (conversation.unreadCount || 0) + 1;
+                }
+            } else {
+                // This case implies a new conversation started by someone else.
+                // We'd need more info (recipient details) to create a full conversation object.
+                // For this mock, we'll assume the conversation exists or rely on a full refresh.
+                console.warn("Received message for a conversation not yet in local state. Consider fetching full conversation details.");
+                // A simple fetch might be needed, or the backend could push full conversation update.
+                // For now, just trigger a general unread fetch.
+                 fetchUnreadMessages(); // This will update the main badge
+            }
+
+
+            // If the messaging modal is open and conversation list is visible, re-render it
+            if (appState.isMessagingModalOpen && !DOMElements.conversationListView.classList.contains('hidden')) {
+                renderConversationList(appState.conversations.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)));
+            } else {
+                 // If chat view is active or modal is closed, still update the main badge based on all conversations
+                 const totalUnread = appState.conversations.reduce((sum, conv) => sum + (conv.unreadCount || 0), 0);
+                 updateUnreadBadge(totalUnread);
+            }
+
+
+            // If this message belongs to the currently active chat
+            if (appState.activeConversation.id === messageData.conversationId && appState.isMessagingModalOpen && !DOMElements.chatView.classList.contains('hidden')) {
+                appendMessageToChat(messageData);
+                appState.activeConversation.messages.push(messageData);
+                // Mark as read since user is viewing the chat
+                apiFetch(`/api/messages/conversations/${messageData.conversationId}/read`, 'PUT')
+                    .then(() => {
+                        // Optionally, refresh conversation list in background if needed for unread count updates
+                        // This might be redundant if renderConversationList was already called above
+                        // and correctly reset unread counts.
+                        const convToUpdate = appState.conversations.find(c => c.id === messageData.conversationId);
+                        if(convToUpdate) convToUpdate.unreadCount = 0;
+
+                        // Re-calculate total unread for the main badge
+                        const totalUnread = appState.conversations.reduce((sum, conv) => sum + (conv.unreadCount || 0), 0);
+                        updateUnreadBadge(totalUnread);
+                    });
+            }
+        }
+
+
+        function showConversationListView() {
+            appState.activeConversation.id = null;
+            appState.activeConversation.recipientName = null;
+            appState.activeConversation.recipientId = null;
+            appState.activeConversation.messages = [];
+
+            DOMElements.chatView.classList.add('hidden');
+            DOMElements.conversationListView.classList.remove('hidden');
+            // Optionally, refresh conversation list if needed
+            // renderConversationList(appState.conversations);
+        }
+
+        // This function would be called by a button, e.g., "Message Vendor"
+        async function startOrOpenChatWith(vendorOwnerId) {
+            if (!loggedInUser) {
+                // DOMElements.loginModal.classList.remove('hidden'); // Show login modal
+                alert("Please log in to send messages."); // Placeholder for login modal
+                return;
+            }
+
+            // console.log(`Attempting to start or open chat with user ID: ${vendorOwnerId}`);
+
+            try {
+                // Call API to get or create a conversation.
+                // Send a null message to indicate it's just to open/create, not send a message yet.
+                const response = await apiFetch('/api/messages', 'POST', {
+                    receiverId: vendorOwnerId,
+                    message: null // Important: signal to backend to just ensure conversation exists
+                });
+
+                if (response.success && response.data) {
+                    const conversation = response.data;
+                    // console.log("Got or created conversation:", conversation);
+
+                    // Ensure this new/existing conversation is in our local state
+                    const existingConvIndex = appState.conversations.findIndex(c => c.id === conversation.id);
+                    if (existingConvIndex === -1) {
+                        appState.conversations.push(conversation);
+                    } else {
+                        // Update existing conversation if needed (e.g., timestamp, last message if backend returns it)
+                        appState.conversations[existingConvIndex] = conversation;
+                    }
+                    // Sort by most recent
+                    appState.conversations.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+
+                    // Close any other modals (e.g., vendor details modal if this was called from there)
+                    // Example: if (DOMElements.vendorDetailModal) DOMElements.vendorDetailModal.classList.add('hidden');
+
+                    if (!appState.isMessagingModalOpen) {
+                        await openMessagingModal(); // This will fetch all conversations and render list
+                    }
+                     // Then open the specific chat
+                    openChat(conversation.id, conversation.recipient.name, conversation.recipient.id, conversation.recipient.avatar);
+
+
+                } else {
+                    console.error("Error starting or opening chat:", response.error || "Unknown error");
+                    alert("Could not start chat. Please try again.");
+                }
+            } catch (error) {
+                console.error("Error in startOrOpenChatWith:", error);
+                alert("An unexpected error occurred while starting chat.");
+            }
+        }
+
+
+        // Initialization
+        document.addEventListener('DOMContentLoaded', () => {
+            // Check if all DOMElements are found (basic sanity check)
+            let allElementsPresent = true;
+            for (const key in DOMElements) {
+                if (DOMElements[key] === null && key !== 'loginModal' && key !== 'chatViewRecipientAvatar' && key !== 'chatMessageAreaCustomerService') { // loginModal is optional here
+                    console.error(`DOM Element not found: ${key}`);
+                    allElementsPresent = false;
+                }
+            }
+
+            if(DOMElements.chatViewRecipientAvatar === null) console.warn("chatViewRecipientAvatar element not found, avatar will not be displayed in chat view.");
+            if(DOMElements.chatMessageAreaCustomerService === null) console.warn("chatMessageAreaCustomerService element not found.");
+
+
+            if (allElementsPresent || (DOMElements.messagesBtn && DOMElements.messagingModalContainer)) { //Proceed if critical elements are there
+                attachEventListeners();
+                fetchUnreadMessages(); // Fetch initial unread count
+                initSocket(); // Initialize WebSocket connection
+            } else {
+                console.error("Critical messaging DOM elements missing. Messaging system may not work.");
+                // Optionally, disable messaging features or show an error to the user
+                if(DOMElements.messagesBtn) DOMElements.messagesBtn.disabled = true;
+            }
+
+            // Example: Simulate receiving a new message via Socket.IO after 5 seconds
+            // This would typically be initiated by the server pushing a message.
+            // setTimeout(() => {
+            //     if (appState.socket) { // Check if socket is initialized
+            //         // For testing, manually craft a message object
+            //         const testMessage = {
+            //             id: 'newSocketMsg1',
+            //             conversationId: 'conv1', // An existing conversation ID
+            //             senderId: 2, // ID of the sender (not the loggedInUser)
+            //             text: 'Hello from socket!',
+            //             timestamp: new Date().toISOString()
+            //         };
+            //         // Manually call handleIncomingMessage as if the socket event occurred
+            //         handleIncomingMessage(testMessage);
+            //     }
+            // }, 15000); // Delayed to allow UI to settle
+        });
+
+    </script>
+</body>
+</html>
