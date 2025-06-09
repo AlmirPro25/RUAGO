@@ -69,7 +69,6 @@ RuaGO é uma plataforma web projetada para revolucionar o comércio de rua, cone
     ```bash
     npm install
     ```
-    (O `package.json` lista todas as dependências necessárias como: `express`, `mongoose`, `cors`, `bcryptjs`, `jsonwebtoken`, `dotenv`, `socket.io`, `@google/generative-ai`, `helmet`, `express-rate-limit`, etc., e devDependencies como `mocha`, `chai`, etc.)
 
 3.  **Set up environment variables:**
     *   Crie um arquivo `.env` na raiz do projeto.
@@ -81,10 +80,14 @@ RuaGO é uma plataforma web projetada para revolucionar o comércio de rua, cone
     *   Verifique se a `MONGO_URI` no seu `.env` está correta e aponta para o seu banco de dados de desenvolvimento (e.g., `ruago_dev`).
 
 5.  **Run the backend server:**
-    ```bash
-    npm start
-    ```
-    (Este comando executa `node server.js` conforme definido no `package.json`.)
+    *   Para um modo de desenvolvimento com reinício automático ao salvar alterações (usando `nodemon`):
+        ```bash
+        npm run dev
+        ```
+    *   Para iniciar o servidor normalmente (como em produção):
+        ```bash
+        npm start
+        ```
     O servidor backend deverá estar rodando em `http://localhost:PORT` (o `PORT` definido no seu `.env`, e.g., 3000). Você deverá ver logs como "Server running on port 3000" e "MongoDB Connected".
 
 6.  **Access the frontend:**
